@@ -1,5 +1,5 @@
 import './globals.css'
-export const metadata = { title: 'Text → Diagram', description: 'Turn structured text or plain prose into interactive diagrams. No sign-in.' }
+export const metadata = { title: 'MapTree — turn ideas into diagrams', description: 'MapTree turns outlines, plain prose, or AI-structured notes into interactive diagrams, with projects, version history, notes, and SRS/PRD generation.' }
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="en"><head>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

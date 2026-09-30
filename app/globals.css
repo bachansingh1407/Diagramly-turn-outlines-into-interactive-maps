@@ -297,6 +297,8 @@ aside { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--
 .bd::after { content: ""; position: absolute; inset: -9px; } /* larger touch target */
 .bd:hover:not(:disabled) { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .v .bd { right: auto; top: auto; left: calc(50% - 11px); bottom: -11px; }
+.n .ic { display: inline-block; width: 1.15em; text-align: center; } /* keeps labels aligned across mixed-width emoji */
+.nt { position: absolute; left: -7px; top: -7px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--r-full); background: var(--warning); color: #2b1c04; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-shadow: var(--shadow-sm); }
 .react-flow__handle { opacity: 0 !important; }
 .c .react-flow__handle { left: 50% !important; top: 50% !important; }
 
@@ -322,6 +324,42 @@ aside { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--
 .mcard { position: relative; inset: auto; width: min(460px, 92vw); max-height: 88vh; overflow: auto; padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); background: var(--surface); animation: pop 180ms ease; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+.hint { font-size: var(--fs-xs); color: var(--foreground-muted); line-height: 1.6; margin: 0; }
+.hint b { color: var(--foreground); font-weight: 600; }
+
+/* ==========================================================================
+   Chips (AI suggestions) + notes (node comments)
+   ========================================================================== */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { height: 26px; padding: 0 10px 0 8px; font-size: var(--fs-xs); border-radius: var(--r-full); background: var(--secondary-soft); border-color: color-mix(in srgb, var(--secondary) 40%, var(--border)); color: var(--secondary); gap: 4px; }
+.chip:hover:not(:disabled) { background: var(--secondary-soft); border-color: var(--secondary); }
+.notes { display: flex; flex-direction: column; gap: 6px; padding-top: var(--sp-2); border-top: 1px dashed var(--border); }
+.notes > small { color: var(--foreground-muted); font-size: var(--fs-xs); font-weight: 600; }
+.note { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px; font-size: var(--fs-xs); }
+.note span { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.note button { height: 20px; width: 20px; flex: none; }
+
+/* ==========================================================================
+   Projects / history modals + share popover
+   ========================================================================== */
+.plist { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.prow { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-muted); flex-wrap: wrap; }
+.prow.on { border-color: var(--primary); background: var(--primary-soft); }
+.pinfo { display: flex; flex-direction: column; min-width: 0; }
+.pinfo b { font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.pinfo small { color: var(--foreground-muted); font-size: var(--fs-xs); }
+.sharerow { display: flex; flex-direction: column; gap: 6px; padding: var(--sp-3) 0; border-bottom: 1px solid var(--border); }
+.sharerow:last-child { border: 0; padding-bottom: 0; }
+.sharerow p { margin: 0; color: var(--foreground-muted); font-size: var(--fs-xs); }
+
+/* ==========================================================================
+   Templates browser (inside the View panel)
+   ========================================================================== */
+.tmpl { display: flex; flex-direction: column; gap: var(--sp-2); max-height: 220px; overflow-y: auto; padding-right: 2px; }
+.tmplg { display: flex; flex-direction: column; gap: 4px; }
+.tmplg > small { color: var(--foreground-muted); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.tmplg .row button { height: 26px; padding: 0 8px; font-size: var(--fs-xs); font-weight: 400; }
+
 .krows { display: grid; }
 .krows div { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); }
 .krows div:last-child { border: 0; }
