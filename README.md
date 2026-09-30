@@ -45,8 +45,7 @@ Without a key, the rest of the app works fully — those three buttons will show
 - **Everything except sharing is client-side.** Projects, version history, and notes live in the browser's `localStorage`, namespaced under `maptree:*`. They do not sync across devices or browsers. The data layer (`lib/store/local.ts`) is written as a small repository so swapping it for a real database is a contained change, not a rewrite.
 - **Share links use the server's temp directory** (`lib/share/store.ts`), so they work out of the box with zero setup. On a normal long-running Node server (`npm run start`) this is durable for as long as the process and disk survive. **On stateless/serverless hosting (e.g. Vercel functions), the temp directory is ephemeral and links can disappear** — swap in a real database or KV store (e.g. Postgres, Redis, Vercel KV) before relying on shared links in that kind of deployment.
 - **Node identity isn't stable across raw text edits.** Notes are keyed by a node's label path (e.g. `Project > Backend > API`) rather than an internal id, because typing directly in the outline reparses and reassigns ids. This means renaming a node's label — or one of its ancestors — detaches its existing notes. Editing via the node panel (Rename button) preserves ids and notes; typing the new label directly in the textarea does not.
-- **AI quality depends on the configured model.** `GROQ_MODEL` defaults to `llama-3.3-70b-versatile`; change it in `.env.local` if Groq renames or retires that model (e.g. to `openai/gpt-oss-120b`). Same idea for `XAI_MODEL` if you're using xAI instead.
-
+- **AI quality depends on the configured model.** `GROQ_MODEL` can be configured in `.env.local` with a model currently available to your Groq account.
 ## What's still manual-review territory
 
 - Rename/new-project naming currently uses the browser's native `prompt()` dialog — functional, but a dedicated inline form would feel more native.
