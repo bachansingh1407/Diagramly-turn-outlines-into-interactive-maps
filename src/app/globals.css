@@ -1,0 +1,26 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+:root{--bg:248 248 246;--panel:255 255 255;--line:229 229 225;--ink:24 24 27;--mute:113 113 122;--accent:232 93 44;--ok:22 128 90;--no:190 60 60;
+  --g-bg:225 244 236;--g-bd:61 143 115;--g-tx:15 82 64;
+  --r-bg:250 236 231;--r-bd:192 106 85;--r-tx:122 42 20;
+  --n-bg:251 251 249;--n-bd:220 220 214;--n-tx:24 24 27;
+  --b-bg:232 240 251;--b-bd:111 149 207;--b-tx:29 63 115}
+.dark{--bg:15 16 19;--panel:24 26 31;--line:46 49 56;--ink:236 236 238;--mute:150 154 163;--accent:240 112 64;--ok:74 190 140;--no:235 110 110;
+  --g-bg:18 54 44;--g-bd:62 160 128;--g-tx:160 225 200;
+  --r-bg:70 36 30;--r-bd:200 110 90;--r-tx:245 190 175;
+  --n-bg:28 30 36;--n-bd:58 62 70;--n-tx:236 236 238;
+  --b-bg:24 40 70;--b-bd:90 130 200;--b-tx:175 200 240}
+body{background:rgb(var(--bg));color:rgb(var(--ink));margin:0;height:100vh;overflow:hidden}
+/* node cards: green = step, red = check / decision, neutral = start / end, blue = external */
+.c-process{background:rgb(var(--g-bg));border-color:rgb(var(--g-bd));color:rgb(var(--g-tx))}
+.c-check,.c-decision{background:rgb(var(--r-bg));border-color:rgb(var(--r-bd));color:rgb(var(--r-tx))}
+.c-start,.c-end{background:rgb(var(--n-bg));border-color:rgb(var(--n-bd));color:rgb(var(--n-tx))}
+.c-external{background:rgb(var(--b-bg));border-color:rgb(var(--b-bd));color:rgb(var(--b-tx))}
+.react-flow{background:rgb(var(--bg))}
+.react-flow__handle{width:8px;height:8px;background:rgb(var(--panel));border:1.5px solid rgb(var(--mute));opacity:0;transition:opacity .15s}
+.react-flow__node:hover .react-flow__handle,.react-flow__node.selected .react-flow__handle{opacity:1}
+.react-flow__controls{box-shadow:none;border:1px solid rgb(var(--line));border-radius:12px;overflow:hidden}
+.react-flow__controls-button{background:rgb(var(--panel));color:rgb(var(--ink));border-bottom:1px solid rgb(var(--line))}
+.react-flow__controls-button svg{fill:currentColor}
+.react-flow__attribution{display:none}
+
+.c-topic{background:rgb(var(--panel));border-color:rgb(var(--line))}
