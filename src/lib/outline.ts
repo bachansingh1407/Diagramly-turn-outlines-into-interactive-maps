@@ -63,7 +63,8 @@ export function parseOutline(raw: string): { title: string; graph: Graph } | nul
     const id = `d${i + 1}`, base = s.title.replace(/\s*(&|and)\s*(failover|retry|fallback|error handling).*$/i, "");
     let back = i - 1;
     for (let j = i - 1; j >= 1; j--) if (ROUTE.test(stages[j].title)) { back = j; break; }
-    nodes.splice(nodes.findIndex((n) => n.id === ids[i]) + 1, 0, { id, type: "decision", title: `${base} successful?`, desc: clip(step, 90) });
+    const lim = step.match(/\b(\d+|two|three|four|five)\s*(?:times|retries|attempts)\b/i), WORD: Record<string, number> = { two: 2, three: 3, four: 4, five: 5 };
+    nodes.splice(nodes.findIndex((n) => n.id === ids[i]) + 1, 0, { id, type: "decision", title: `${base} successful?`, desc: clip(step, 90), ...(lim ? { max: Math.min(99, WORD[lim[1].toLowerCase()] ?? +lim[1]) } : {}) });
     dec.set(i, id);
     link(ids[i], id);
     link(id, ids[i + 1], "Yes");

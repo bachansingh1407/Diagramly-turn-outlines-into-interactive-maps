@@ -5,14 +5,18 @@ import {
   applyNodeChanges, applyEdgeChanges, useReactFlow, type Node, type Edge, type NodeProps, type Connection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Sparkles, Undo2, Redo2, Download, Sun, Moon, Trash2, Plus, XCircle, CheckCircle2, ChevronDown, Settings2, GitFork, LayoutTemplate, Wand2, ArrowDown, ArrowRight, ListTree, Network, RefreshCw, LayoutList, PanelTop, Rows3, FileText, Play, Flag, Box, Plug, ShieldCheck, Circle, SplitSquareHorizontal } from "lucide-react";
+import { Sparkles, Undo2, Redo2, Download, Sun, Moon, Trash2, Plus, XCircle, CheckCircle2, ChevronDown, Settings2, GitFork, LayoutTemplate, Wand2, ArrowDown, ArrowRight, ListTree, Network, RefreshCw, LayoutList, PanelTop, Rows3, FileText, Play, Flag, Box, Plug, ShieldCheck, Circle, SplitSquareHorizontal, Check, X, MessageSquare } from "lucide-react";
 import { classify, toMermaid, validate, NODE_TYPES, type Graph, type NodeType, type EdgeKind } from "@/lib/graph";
-import { GraphSchema } from "@/lib/schema";
+import { GraphSchema, KINDS, PROV, type Prov } from "@/lib/schema";
+import type { Conflict, Question } from "@/lib/graph";
+import { readSaved } from "@/lib/storage";
+import { toPng, toSvg } from "html-to-image";
+import { getNodesBounds, getViewportForBounds } from "@xyflow/react";
 import { layoutView, suggestView, SIZE, type View, type CardStyle } from "@/lib/layout";
 import { parseOutline, parseHierarchy, looksHierarchy } from "@/lib/outline";
 import { toSRS } from "@/lib/srs";
 
-type ND = { type: NodeType; title: string; desc: string; view?: View; cs?: CardStyle } & Record<string, unknown>;
+type ND = { type: NodeType; title: string; desc: string; view?: View; cs?: CardStyle; prov?: Prov; src?: string; max?: number } & Record<string, unknown>;
 type N = Node<ND>;
 type Snap = { nodes: N[]; edges: Edge[] };
 
@@ -72,13 +76,16 @@ const SAMPLES: Record<string, string> = {
 
 const toNodes = (g: Graph, v: View = "flow-tb", cs: CardStyle = "classic"): N[] => {
   const p = layoutView(g, v, cs);
-  return g.nodes.map((n) => ({ id: n.id, type: "card", position: p[n.id] ?? { x: 0, y: 0 }, data: { type: n.type, title: n.title, desc: n.desc } }));
+  return g.nodes.map((n) => ({ id: n.id, type: "card", position: p[n.id] ?? { x: 0, y: 0 }, data: { type: n.type, title: n.title, desc: n.desc, prov: n.prov ?? "stated", src: n.src ?? "", max: n.max } }));
 };
-const toEdges = (g: Graph): Edge[] => g.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: e.label, data: { kind: e.kind } }));
-const kindOf = (e: Edge): EdgeKind => ((e.data as { kind?: string } | undefined)?.kind === "feedback" ? "feedback" : "flow");
+const toEdges = (g: Graph): Edge[] => g.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: e.label, data: { kind: e.kind, prov: e.prov ?? "stated", src: e.src ?? "" } }));
+const kindOf = (e: Edge): EdgeKind => { const k = (e.data as { kind?: string } | undefined)?.kind ?? ""; return (KINDS as readonly string[]).includes(k) ? (k as EdgeKind) : "flow"; };
+const pv = (e: Edge): Prov => ((e.data as { prov?: Prov } | undefined)?.prov ?? "stated");
+const KINDLBL: Partial<Record<EdgeKind, string>> = { contains: "contains", member: "member of", authorizes: "authorizes", depends: "depends on", data: "data" };
+const sc = (e: Edge) => (e.data as { src?: string } | undefined)?.src ?? "";
 const toGraph = (nodes: N[], edges: Edge[]): Graph => ({
-  nodes: nodes.map((n) => ({ id: n.id, type: n.data.type, title: n.data.title, desc: n.data.desc })),
-  edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: String(e.label ?? ""), kind: kindOf(e) })),
+  nodes: nodes.map((n) => ({ id: n.id, type: n.data.type, title: n.data.title, desc: n.data.desc, prov: n.data.prov ?? "stated", src: n.data.src ?? "", ...(n.data.max ? { max: n.data.max } : {}) })),
+  edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: String(e.label ?? ""), kind: kindOf(e), prov: pv(e), src: sc(e) })),
 });
 const save = (name: string, text: string) => {
   const a = document.createElement("a");
@@ -101,7 +108,7 @@ function Handles({ view }: { view: View }) {
 }
 
 function Card({ data, selected }: NodeProps<N>) {
-  const cs = data.cs ?? "classic", view = data.view ?? "flow-tb", Icon = ICON[data.type], ring = selected ? "ring-4 ring-accent/25 !border-accent" : "";
+  const cs = data.cs ?? "classic", view = data.view ?? "flow-tb", Icon = ICON[data.type], ring = (selected ? "ring-4 ring-accent/25 !border-accent" : "") + (data.prov === "assumed" ? " !border-dashed" : "");
   const rows = data.desc ? data.desc.split(" · ") : [];
   if (cs === "workflow") return (
     <div title={data.desc} className={`flex h-[84px] w-[320px] items-center gap-3 rounded-xl border border-line bg-panel px-3 shadow-sm ${ring}`}>
@@ -121,7 +128,7 @@ function Card({ data, selected }: NodeProps<N>) {
     </div>);
   return (
     <div title={data.desc ? `${data.title} — ${data.desc}` : data.title}
-      className={`c-${data.type} flex h-[92px] w-[420px] flex-col items-center justify-center rounded-xl border px-5 text-center shadow-sm transition ${selected ? "ring-4 ring-accent/25" : ""}`}>
+      className={`c-${data.type} flex h-[92px] w-[420px] flex-col items-center justify-center rounded-xl border px-5 text-center shadow-sm transition ${selected ? "ring-4 ring-accent/25" : ""} ${data.prov === "assumed" ? "border-dashed" : ""}`}>
       <Handles view={view} />
       <div className="w-full truncate text-[15px] font-semibold leading-tight">{data.title}</div>
       {data.desc && <div className="mt-1 line-clamp-2 w-full text-[12px] leading-snug opacity-80">{data.desc}</div>}
@@ -163,6 +170,12 @@ function Inner() {
   const [cs, setCs] = useState<CardStyle>("workflow");
   const [mode, setMode] = useState<"auto" | "process" | "hier">("auto");
   const [srsOpen, setSrsOpen] = useState(false);
+  const [conflicts, setConflicts] = useState<Conflict[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [instr, setInstr] = useState("");
+  const [prev, setPrev] = useState<{ explanation: string; applied: string[]; graph: Graph } | null>(null);
+  const [refining, setRefining] = useState(false);
+  const [store, setStore] = useState<"saved" | "failed">("saved");
 
   const fit = () => setTimeout(() => rf.fitView({ padding: 0.15, duration: 350 }), 120);
   const show = (g: Graph, v = view, c = cs) => { setNodes(toNodes(g, v, c)); setEdges(toEdges(g)); fit(); };
@@ -171,9 +184,9 @@ function Inner() {
   const redo = () => { const p = fut.at(-1); if (!p) return; setHist((h) => [...h, { nodes, edges }]); setFut((f) => f.slice(0, -1)); setNodes(p.nodes); setEdges(p.edges); };
 
   useEffect(() => {
-    let d: { nodes?: N[]; edges?: Edge[]; text?: string; title?: string; key?: string; dark?: boolean; view?: View; cs?: CardStyle } | null = null;
-    try { d = JSON.parse(localStorage.getItem("maptree:v4") || "null"); } catch {}
-    if (d?.nodes?.length) { setNodes(d.nodes); setEdges(d.edges ?? []); setText(d.text ?? ""); setTitle(d.title ?? "Untitled diagram"); setKey(d.key ?? ""); setDark(!!d.dark); setView(d.view ?? "flow-tb"); setCs(d.cs ?? "workflow"); fit(); }
+    let d = null as { nodes?: N[]; edges?: Edge[]; text?: string; title?: string; key?: string; dark?: boolean; view?: View; cs?: CardStyle; conflicts?: Conflict[]; questions?: Question[] } | null;
+    try { d = readSaved((k) => localStorage.getItem(k)) as typeof d; } catch {}
+    if (d?.nodes?.length) { setNodes(d.nodes); setEdges(d.edges ?? []); setText(d.text ?? ""); setTitle(d.title ?? "Untitled diagram"); setKey(d.key ?? ""); setDark(!!d.dark); setView(d.view ?? "flow-tb"); setCs(d.cs ?? "workflow"); setConflicts(d.conflicts ?? []); setQuestions(d.questions ?? []); fit(); }
     else { // first visit: show the example already built
       const t = SAMPLES["RCS delivery"], r = parseOutline(t);
       setText(t); if (r) { setTitle(r.title); show(r.graph, "flow-tb", "workflow"); }
@@ -184,8 +197,8 @@ function Inner() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     if (!ready) return;
-    try { localStorage.setItem("maptree:v4", JSON.stringify({ nodes, edges, text, title, key, dark, view, cs })); } catch {}
-  }, [nodes, edges, text, title, key, dark, view, cs, ready]);
+    try { localStorage.setItem("maptree:v4", JSON.stringify({ nodes, edges, text, title, key, dark, view, cs, conflicts, questions })); setStore("saved"); } catch { setStore("failed"); }
+  }, [nodes, edges, text, title, key, dark, view, cs, conflicts, questions, ready]);
 
   const cur = useMemo(() => toGraph(nodes, edges), [nodes, edges]);
   const issues = useMemo(() => validate(cur), [cur]);
@@ -193,20 +206,21 @@ function Inner() {
   const errors = issues.filter((i) => i.level === "error").length;
 
   const radial = view === "mind" || view === "loop";
-  const shownNodes = useMemo(() => nodes.map((n) => ({ ...n, data: { ...n.data, view, cs } })), [nodes, view, cs]);
+  const shownNodes = useMemo(() => nodes.map((n) => ({ ...n, data: { ...n.data, view, cs, desc: n.data.desc || (n.data.max ? `Limit: ${n.data.max} attempts` : "") } })), [nodes, view, cs]);
   const shownEdges = useMemo<Edge[]>(() => {
-    const pos = new Map(nodes.map((n) => [n.id, n.position]));
+    const pos = new Map(nodes.map((n) => [n.id, n.position])), lane = new Map<string, number>();
+    edges.forEach((e) => { if (cls.back.has(e.id)) lane.set(e.id, lane.size); });
     return edges.map((e): Edge => {
       const fb = cls.feedback.has(e.id), bk = cls.back.has(e.id), l = String(e.label ?? "").toLowerCase();
       const tone = /^(yes|ok|success|true)/.test(l) ? "rgb(var(--ok))" : /^(no|fail|error|false)/.test(l) ? "rgb(var(--no))" : "rgb(var(--mute))";
-      let sh = fb ? "rout" : bk ? "lout" : "out", th = fb ? "rin" : bk ? "lin" : "in", extra: Partial<Edge> = fb || bk ? { type: "smoothstep", pathOptions: { offset: 38, borderRadius: 16 } } : {};
+      let sh = fb ? "rout" : bk ? "lout" : "out", th = fb ? "rin" : bk ? "lin" : "in", extra: Partial<Edge> = fb || bk ? { type: "smoothstep", pathOptions: { offset: 38 + 26 * (lane.get(e.id) ?? 0), borderRadius: 16 } } : {};
       if (radial) {
         const a = pos.get(e.source), c = pos.get(e.target); extra = {};
         if (a && c) { const dx = c.x - a.x, dy = c.y - a.y, k = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "r" : "l") : dy > 0 ? "b" : "t"; sh = k + "s"; th = OPP[k] + "t"; }
       }
       return {
-        ...e, sourceHandle: sh, targetHandle: th, ...extra,
-        style: { stroke: e.selected ? "rgb(var(--accent))" : "rgb(var(--mute))", strokeWidth: 2, strokeDasharray: fb || bk ? "6 5" : undefined },
+        ...e, label: e.label || KINDLBL[kindOf(e)] || undefined, sourceHandle: sh, targetHandle: th, ...extra,
+        style: { stroke: e.selected ? "rgb(var(--accent))" : "rgb(var(--mute))", strokeWidth: 2, strokeDasharray: fb || bk || (e.data as { prov?: string } | undefined)?.prov === "assumed" ? "6 5" : undefined },
         markerEnd: { type: MarkerType.ArrowClosed, color: "rgb(var(--mute))", width: 18, height: 18 },
         labelStyle: { fontSize: 11, fontWeight: 600, fill: tone }, labelBgPadding: [8, 4] as [number, number], labelBgBorderRadius: 10,
         labelBgStyle: { fill: "rgb(var(--panel))", stroke: "rgb(var(--line))" },
@@ -226,7 +240,7 @@ function Inner() {
     const hier = mode === "hier" || (mode === "auto" && looksHierarchy(t)), r = hier ? parseHierarchy(t) : parseOutline(t);
     if (!r) { setErr(hier ? "Need at least two lines in the list." : "Need at least two steps. Put each stage on its own line and indent its sub-steps underneath."); return; }
     const v = suggestView(r.graph);
-    setErr(""); snap(); setTitle(r.title); setView(v); show(r.graph, v, cs);
+    setErr(""); snap(); setTitle(r.title); setView(v); show(r.graph, v, cs); setConflicts([]); setQuestions([]); setPrev(null);
   };
   const buildAI = async () => {
     if (!text.trim()) return;
@@ -235,8 +249,37 @@ function Inner() {
       const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", "x-groq-key": key }, body: JSON.stringify({ text, model }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Generation failed");
-      snap(); const v = suggestView(j.graph as Graph); setView(v); show(j.graph as Graph, v, cs);
+      snap(); const v = suggestView(j.graph as Graph); setView(v); show(j.graph as Graph, v, cs); setConflicts((j.graph as Graph).conflicts ?? []); setQuestions((j.graph as Graph).questions ?? []); setPrev(null);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  const assumed = useMemo(() => [
+    ...nodes.filter((n) => n.data.prov === "assumed").map((n) => ({ t: "n" as const, id: n.id, label: n.data.title })),
+    ...edges.filter((e) => pv(e) === "assumed").map((e) => ({ t: "e" as const, id: e.id, label: `${nodes.find((n) => n.id === e.source)?.data.title ?? "?"} → ${nodes.find((n) => n.id === e.target)?.data.title ?? "?"}` })),
+  ], [nodes, edges]);
+  const acceptAssumed = (a: { t: "n" | "e"; id: string }) => { snap(); if (a.t === "n") patch(a.id, { prov: "stated" }); else setEdges((es) => es.map((e) => (e.id === a.id ? { ...e, data: { ...(e.data as object), prov: "stated" } } : e))); };
+  const rejectAssumed = (a: { t: "n" | "e"; id: string }) => { snap(); if (a.t === "n") { setNodes((ns) => ns.filter((n) => n.id !== a.id)); setEdges((es) => es.filter((e) => e.source !== a.id && e.target !== a.id)); } else setEdges((es) => es.filter((e) => e.id !== a.id)); };
+  const refine = async () => {
+    if (!instr.trim() || !nodes.length) return;
+    setRefining(true); setErr("");
+    try {
+      const r = await fetch("/api/refine", { method: "POST", headers: { "Content-Type": "application/json", "x-groq-key": key }, body: JSON.stringify({ graph: { ...cur, conflicts, questions }, instruction: instr, model }) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || "Refinement failed");
+      setPrev({ explanation: j.explanation, applied: j.applied, graph: j.graph });
+    } catch (e) { setErr((e as Error).message); } finally { setRefining(false); } // the current diagram is never touched here
+  };
+  const applyPreview = () => { // untouched cards keep their positions
+    if (!prev) return; snap(); const old = new Map(nodes.map((n) => [n.id, n.position]));
+    setNodes(toNodes(prev.graph, view, cs).map((n) => ({ ...n, position: old.get(n.id) ?? n.position }))); setEdges(toEdges(prev.graph)); setPrev(null); setInstr(""); fit();
+  };
+  const exportImage = async (fmt: "png" | "svg") => {
+    setMenu(false);
+    const el = document.querySelector(".react-flow__viewport") as HTMLElement | null; if (!el || !nodes.length) return;
+    try {
+      const b = getNodesBounds(nodes.map((n) => ({ ...n, width: SIZE[cs].w, height: SIZE[cs].h }))), w = Math.ceil(b.width) + 80, h = Math.ceil(b.height) + 80, vp = getViewportForBounds(b, w, h, 0.1, 2, 0.05);
+      const o = { backgroundColor: dark ? "#0f1013" : "#f8f8f6", width: w, height: h, style: { width: `${w}px`, height: `${h}px`, transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})` } };
+      const url = fmt === "png" ? await toPng(el, { ...o, pixelRatio: 2 }) : await toSvg(el, o);
+      const a = document.createElement("a"); a.href = url; a.download = `${title || "diagram"}.${fmt}`; a.click();
+    } catch { setErr("Image export failed in this browser. JSON and Mermaid export still work."); }
   };
   const tidy = () => { snap(); const p = layoutView(cur, view, cs); setNodes((ns) => ns.map((n) => ({ ...n, position: p[n.id] ?? n.position }))); fit(); };
   const onConnect = (c: Connection) => {
@@ -259,7 +302,8 @@ function Inner() {
     if (!f) return;
     try {
       const o = JSON.parse(await f.text()), p = GraphSchema.safeParse(o);
-      if (!p.success) throw new Error("Not a valid MapTree graph file");
+      if (!p.success) throw new Error("Not a valid MapTree graph file (or a newer schema version).");
+      setConflicts(p.data.conflicts ?? []); setQuestions(p.data.questions ?? []);
       snap(); if (o.title) setTitle(o.title); show(p.data as Graph);
     } catch (e) { setErr((e as Error).message); }
   };
@@ -293,6 +337,26 @@ function Inner() {
           <input className={Field} placeholder="Model (blank = GROQ_MODEL)" value={model} onChange={(e) => setModel(e.target.value)} />
         </div>)}
         {err && <p className="rounded-lg bg-no/10 p-2 text-xs text-no">{err}</p>}
+        {nodes.length > 0 && (<div className="space-y-2 border-t border-line pt-3">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-mute"><MessageSquare size={13} />Refine</div>
+          <input className={Field} placeholder='e.g. "Show the failure path"' value={instr} onChange={(e) => setInstr(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") refine(); }} />
+          <button onClick={refine} disabled={refining || !instr.trim()} className="h-8 w-full rounded-lg border border-line text-[13px] hover:border-accent disabled:opacity-40">{refining ? "Working…" : "Preview change"}</button>
+          {prev && (<div className="space-y-2 rounded-lg bg-bg p-2 text-xs">
+            {prev.explanation && <p>{prev.explanation}</p>}
+            {prev.applied.length ? <ul className="list-disc pl-4">{prev.applied.map((a, i) => <li key={i}>{a}</li>)}</ul> : <p className="text-mute">No change proposed.</p>}
+            <div className="flex gap-2">{prev.applied.length > 0 && <button onClick={applyPreview} className="rounded-md bg-accent px-2.5 py-1 text-white">Apply</button>}<button onClick={() => setPrev(null)} className="rounded-md border border-line px-2.5 py-1">Discard</button></div>
+          </div>)}
+        </div>)}
+        {(assumed.length > 0 || conflicts.length > 0 || questions.length > 0) && (<div className="space-y-2 border-t border-line pt-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-mute">Review</div>
+          {assumed.map((a) => (<div key={a.t + a.id} className="flex items-start gap-2 rounded-lg bg-bg p-2 text-xs"><span className="flex-1"><b className="font-medium">Assumed:</b> {a.label}</span>
+            <button title="Accept as stated" className="text-ok" onClick={() => acceptAssumed(a)}><Check size={14} /></button><button title="Reject and remove" className="text-no" onClick={() => rejectAssumed(a)}><X size={14} /></button></div>))}
+          {questions.map((q, i) => (<div key={(q.id || "q") + i} className="rounded-lg bg-bg p-2 text-xs"><b className="font-medium">Open question:</b> {q.summary}
+            <button className="ml-2 text-accent" onClick={() => setQuestions((x) => x.filter((_, j) => j !== i))}>Answered</button></div>))}
+          {conflicts.map((c, i) => (<div key={(c.id || "c") + i} className="rounded-lg bg-no/10 p-2 text-xs"><b className="font-medium">Conflict:</b> {c.summary}
+            {c.a && <p className="mt-1 text-mute">“{c.a}”</p>}{c.b && <p className="text-mute">“{c.b}”</p>}
+            <button className="mt-1 text-accent" onClick={() => setConflicts((x) => x.filter((_, j) => j !== i))}>Mark resolved</button></div>))}
+        </div>)}
         {nodes.length > 0 && (<div className="border-t border-line pt-3">
           <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-mute">
             {errors ? <XCircle size={13} className="text-no" /> : <CheckCircle2 size={13} className="text-ok" />}
@@ -318,6 +382,7 @@ function Inner() {
           <Seg v={cs} set={(c) => arrange(view, c)} items={STYLES} />
         </div>
         <div className={`${Pill} absolute right-4 top-4 flex items-center gap-1 p-1.5`}>
+          <span className="px-1.5 text-[11px] text-mute">{busy || refining ? "Processing…" : store === "saved" ? "Saved" : "Not saved"}</span>
           <Btn onClick={() => setSrsOpen(true)} disabled={!nodes.length} title="Generate SRS document"><FileText size={16} /></Btn>
           <Btn onClick={undo} disabled={!hist.length} title="Undo"><Undo2 size={16} /></Btn>
           <Btn onClick={redo} disabled={!fut.length} title="Redo"><Redo2 size={16} /></Btn>
@@ -328,8 +393,10 @@ function Inner() {
             <button onClick={() => setMenu(!menu)} className="flex h-8 items-center gap-1 rounded-lg bg-accent px-3 text-[13px] font-medium text-white hover:opacity-90"><Download size={14} />Export<ChevronDown size={12} /></button>
             {menu && (
               <div className={`${Pill} absolute right-0 top-10 z-10 w-44 p-1 text-[13px]`}>
-                <button className="block w-full rounded-md px-3 py-1.5 text-left hover:bg-bg" onClick={() => { save("diagram.json", JSON.stringify({ title, ...cur }, null, 2)); setMenu(false); }}>Graph JSON</button>
+                <button className="block w-full rounded-md px-3 py-1.5 text-left hover:bg-bg" onClick={() => { save("diagram.json", JSON.stringify({ version: 1, title, ...cur, conflicts, questions }, null, 2)); setMenu(false); }}>Graph JSON</button>
                 <button className="block w-full rounded-md px-3 py-1.5 text-left hover:bg-bg" onClick={() => { save("diagram.mmd", toMermaid(cur)); setMenu(false); }}>Mermaid</button>
+                <button className="block w-full rounded-md px-3 py-1.5 text-left hover:bg-bg" onClick={() => exportImage("png")}>PNG image</button>
+                <button className="block w-full rounded-md px-3 py-1.5 text-left hover:bg-bg" onClick={() => exportImage("svg")}>SVG image</button>
                 <label className="block cursor-pointer rounded-md px-3 py-1.5 hover:bg-bg">Import JSON…<input type="file" accept=".json" hidden onChange={(e) => { importFile(e.target.files?.[0]); setMenu(false); }} /></label>
               </div>)}
           </div>
@@ -342,12 +409,14 @@ function Inner() {
               <input className={Field} value={selN.data.title} onFocus={snap} onChange={(e) => patch(selN.id, { title: e.target.value })} />
               <select className={Field} value={selN.data.type} onChange={(e) => { snap(); patch(selN.id, { type: e.target.value as NodeType }); }}>{NODE_TYPES.map((t) => <option key={t}>{t}</option>)}</select>
               <textarea className={`${Field} h-20 resize-none`} placeholder="Subtitle / details" value={selN.data.desc} onFocus={snap} onChange={(e) => patch(selN.id, { desc: e.target.value })} />
+              {selN.data.type === "decision" && <input className={Field} type="number" min={1} max={99} placeholder="Attempt limit (optional)" value={selN.data.max ?? ""} onFocus={snap} onChange={(e) => patch(selN.id, { max: e.target.value ? Math.max(1, Math.min(99, Math.round(+e.target.value))) : undefined })} />}
+              <select className={Field} value={selN.data.prov ?? "stated"} title="Provenance" onChange={(e) => { snap(); patch(selN.id, { prov: e.target.value as Prov }); }}>{PROV.map((p) => <option key={p}>{p}</option>)}</select>
+              {selN.data.src ? <p className="rounded-lg bg-bg p-2 text-[11px] text-mute">“{selN.data.src}”</p> : selN.data.prov !== "stated" ? <p className="text-[11px] text-mute">No source text supports this card ({selN.data.prov}).</p> : null}
             </>) : selE && (<>
               <div className="text-xs font-semibold uppercase tracking-wide text-mute">Connection</div>
               <input className={Field} placeholder="Label (Yes / No / retry…)" value={String(selE.label ?? "")} onFocus={snap} onChange={(e) => setEdges((es) => es.map((x) => (x.id === selE.id ? { ...x, label: e.target.value } : x)))} />
-              <select className={Field} value={kindOf(selE)} onChange={(e) => { snap(); setEdges((es) => es.map((x) => (x.id === selE.id ? { ...x, data: { kind: e.target.value } } : x))); }}>
-                <option value="flow">Flow (blocking)</option><option value="feedback">Feedback (status sent back)</option>
-              </select>
+              <select className={Field} value={kindOf(selE)} onChange={(e) => { snap(); setEdges((es) => es.map((x) => (x.id === selE.id ? { ...x, data: { ...(x.data as object), kind: e.target.value } } : x))); }}>{KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</select>
+              {sc(selE) ? <p className="rounded-lg bg-bg p-2 text-[11px] text-mute">“{sc(selE)}”</p> : pv(selE) !== "stated" ? <p className="text-[11px] text-mute">No source text supports this connection ({pv(selE)}).</p> : null}
               <button className="text-xs text-mute hover:text-ink" onClick={() => insertOn(selE)}>+ Insert a step here</button>
               <button className="block text-xs text-mute hover:text-ink" onClick={() => { snap(); setEdges((es) => es.map((x) => (x.id === selE.id ? { ...x, source: x.target, target: x.source } : x))); }}>Reverse direction</button>
             </>)}
